@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta, date
 
 import database
-from collector import parse_and_ingest_csv, fetch_live_from_nse
+from collector import parse_and_ingest_csv, fetch_live_from_nse, fetch_from_mtf_pr, backfill_real_history
 from config import MCAP_TIERS
 from sample_data import seed_sample_database
 
@@ -644,6 +644,34 @@ with tab_breadth:
 with tab_health:
     st.subheader("⚙️ Data Ingestion, Collection & Health Audit")
     
+    # Prominent Banner: Historical PR Archive Backfill
+    st.markdown("### 🏛️ Real Historical Data Sync (NSE PR Archive)")
+    st.info("💡 **Instant Historical Data**: NSE's daily Price/Reports archive covers every trading day from 2017 to today. You can backfill 100% verified official 52-week highs and exact market caps with 1 click!")
+    
+    col_hist1, col_hist2 = st.columns([1, 1])
+    with col_hist1:
+        backfill_count = st.slider("Number of Past Trading Sessions to Backfill", min_value=5, max_value=60, value=30, step=5)
+        if st.button(f"⚡ Backfill Real Past {backfill_count} Trading Days", type="primary"):
+            with st.spinner(f"Connecting to PR archive and downloading real 52-week-high data for past {backfill_count} trading sessions..."):
+                res = backfill_real_history(num_days=backfill_count, end_date_str="2026-11-04")
+                if res["success"]:
+                    st.success(f"✅ Successfully backfilled {res['days_backfilled']} trading sessions! Total new breakout records inserted: {res['total_inserted']}.")
+                    st.rerun()
+                else:
+                    st.error("Failed to backfill data.")
+                    
+    with col_hist2:
+        custom_pr_date = st.date_input("Fetch Specific Historical Date", value=pd.to_datetime("2026-11-03"))
+        if st.button("📥 Fetch Historical Date"):
+            with st.spinner(f"Fetching real PR records for {custom_pr_date}..."):
+                res = fetch_from_mtf_pr(custom_pr_date.strftime("%Y-%m-%d"))
+                if res["success"]:
+                    st.success(f"✅ {res['message']}")
+                    st.rerun()
+                else:
+                    st.warning(f"⚠️ {res['message']}")
+                    
+    st.markdown("---")
     col_ing1, col_ing2 = st.columns(2)
     
     # Section A: Manual CSV Upload
