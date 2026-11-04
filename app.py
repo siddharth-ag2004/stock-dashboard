@@ -218,20 +218,34 @@ with kpi5:
 st.markdown("---")
 
 # ==============================================================================
-# DASHBOARD TABS
+# DASHBOARD NAVIGATION
 # ==============================================================================
-tab_leaderboard, tab_stock, tab_breadth, tab_health = st.tabs([
+nav_options = [
     "Breakout Leaderboard",
     "Stock Deep-Dive",
     "Market Breadth & Trends",
     "Data Ingestion & Health"
-])
+]
+
+if "nav_tab" not in st.session_state or st.session_state["nav_tab"] not in nav_options:
+    st.session_state["nav_tab"] = "Breakout Leaderboard"
+
+selected_tab = st.segmented_control(
+    "Navigation",
+    options=nav_options,
+    key="nav_tab",
+    label_visibility="collapsed"
+)
+
+if not selected_tab:
+    selected_tab = st.session_state.get("nav_tab", "Breakout Leaderboard")
 
 # ------------------------------------------------------------------------------
 # TAB 1: BREAKOUT LEADERBOARD
 # ------------------------------------------------------------------------------
-with tab_leaderboard:
+if selected_tab == "Breakout Leaderboard":
     st.subheader(f"Leaderboard: Ranked by 52-Week High Breakout Frequency ({timeframe})")
+    st.caption("Tip: Click any stock row to open its Stock Deep-Dive and official NSE page.")
     
     if df_leaderboard.empty:
         st.warning("No stocks match the current filter criteria. Try relaxing the market cap, minimum breakout days, or date range filters.")
@@ -251,11 +265,13 @@ with tab_leaderboard:
         display_df['Volume Ratio'] = df_leaderboard['volume_ratio'].astype(float).round(2)
         display_df['Breakout Dates'] = df_leaderboard['breakout_dates_str']
         
-        # Display Streamlit DataFrame with native numerical column sorting
-        st.dataframe(
+        # Display Streamlit DataFrame with row selection enabled
+        event = st.dataframe(
             display_df,
             use_container_width=True,
             hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
             column_config={
                 "Symbol": st.column_config.TextColumn("Symbol", help="NSE Symbol"),
                 "Company": st.column_config.TextColumn("Company", help="Company Name"),
@@ -312,6 +328,14 @@ with tab_leaderboard:
             }
         )
         
+        # Handle stock click event -> navigate to Stock Deep-Dive
+        if event and hasattr(event, "selection") and event.selection and event.selection.rows:
+            clicked_idx = event.selection.rows[0]
+            clicked_symbol = display_df.iloc[clicked_idx]["Symbol"]
+            st.session_state["selected_stock"] = clicked_symbol
+            st.session_state["nav_tab"] = "Stock Deep-Dive"
+            st.rerun()
+        
         # Export Actions
         col_exp1, col_exp2, _ = st.columns([1, 1, 4])
         with col_exp1:
@@ -337,7 +361,7 @@ with tab_leaderboard:
 # ------------------------------------------------------------------------------
 # TAB 2: INDIVIDUAL STOCK DEEP-DIVE
 # ------------------------------------------------------------------------------
-with tab_stock:
+elif selected_tab == "Stock Deep-Dive":
     st.subheader("Stock Analysis & Historical Breakout Activity")
     
     available_symbols = df_leaderboard['symbol'].tolist() if not df_leaderboard.empty else []
@@ -348,12 +372,31 @@ with tab_stock:
             available_symbols = [r[0] for r in cur.fetchall()]
             
     if available_symbols:
-        selected_stock = st.selectbox(
-            "Select Stock for Deep Dive",
-            options=available_symbols,
-            index=0,
-            help="Choose a stock to inspect its complete breakout dates, price progression, and streaks."
-        )
+        default_idx = 0
+        if "selected_stock" in st.session_state and st.session_state["selected_stock"] in available_symbols:
+            default_idx = available_symbols.index(st.session_state["selected_stock"])
+            
+        col_pick, col_links = st.columns([3, 2])
+        with col_pick:
+            selected_stock = st.selectbox(
+                "Select Stock for Deep Dive",
+                options=available_symbols,
+                index=default_idx,
+                help="Choose a stock to inspect its complete breakout dates, price progression, and streaks."
+            )
+            st.session_state["selected_stock"] = selected_stock
+            
+        with col_links:
+            st.write("")
+            st.write("")
+            col_l1, col_l2 = st.columns(2)
+            with col_l1:
+                nse_url = f"https://www.nseindia.com/get-quotes/equity?symbol={selected_stock}"
+                st.link_button("View on NSE India ↗", nse_url)
+            with col_l2:
+                if st.button("← Back to Leaderboard"):
+                    st.session_state["nav_tab"] = "Breakout Leaderboard"
+                    st.rerun()
         
         stock_data = database.get_stock_details(selected_stock)
         info = stock_data["stock"]
@@ -365,6 +408,7 @@ with tab_stock:
         with sc1:
             st.metric("Symbol", info.get("symbol", selected_stock))
             st.caption(info.get("company_name", ""))
+            st.markdown(f"[Official NSE Page ↗](https://www.nseindia.com/get-quotes/equity?symbol={selected_stock})")
         with sc2:
             mcap_val = float(info.get("market_cap_cr") or 0.0)
             st.metric("Market Cap (Cr)", f"{mcap_val:,.2f}")
@@ -469,7 +513,7 @@ with tab_stock:
 # ------------------------------------------------------------------------------
 # TAB 3: MARKET BREADTH & DAILY TRENDS
 # ------------------------------------------------------------------------------
-with tab_breadth:
+elif selected_tab == "Market Breadth & Trends":
     st.subheader("Market Breadth & Daily 52-Week High Trends")
     
     with database.get_connection() as conn:
@@ -553,7 +597,7 @@ with tab_breadth:
 # ------------------------------------------------------------------------------
 # TAB 4: DATA INGESTION & SYSTEM HEALTH
 # ------------------------------------------------------------------------------
-with tab_health:
+elif selected_tab == "Data Ingestion & Health":
     st.subheader("Data Ingestion, Collection & Health Audit")
     
     st.markdown("### Real Historical Data Sync (NSE PR Archive)")
