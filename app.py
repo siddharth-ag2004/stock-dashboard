@@ -157,7 +157,7 @@ min_breakouts = st.sidebar.slider(
 )
 
 # 5. Streak Filter
-active_streak_only = st.sidebar.checkbox("Active Streak Only (Hit high on latest date)", value=False)
+active_streak_only = st.sidebar.checkbox("Hit 52W High Today", value=False)
 
 # 6. Search
 search_query = st.sidebar.text_input("Search Symbol / Company", value="").strip().upper()
