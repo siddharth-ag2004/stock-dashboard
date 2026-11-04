@@ -1,6 +1,6 @@
 """
 HighTrack NSE - 52-Week High Intelligence Dashboard.
-A comprehensive research and momentum tracking dashboard for NSE mainboard equities.
+A research and momentum tracking dashboard for NSE mainboard equities.
 """
 import io
 import streamlit as st
@@ -14,23 +14,19 @@ from collector import parse_and_ingest_csv, fetch_live_from_nse, fetch_from_mtf_
 from config import MCAP_TIERS
 from sample_data import seed_sample_database
 
-# Set page config
+# Page config
 st.set_page_config(
     page_title="HighTrack NSE | 52-Week High Intelligence",
-    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for polished financial dashboard UI
+# Custom CSS for dark financial UI
 st.markdown("""
 <style>
-    /* Main container styling */
     .main {
         background-color: #0e1117;
     }
-    
-    /* Metrics styling */
     div[data-testid="stMetricValue"] {
         font-size: 1.8rem !important;
         font-weight: 700 !important;
@@ -43,40 +39,13 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
-    
-    /* Table styling */
-    .dataframe {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-        font-size: 0.9rem !important;
-    }
-    
-    /* Streak badge */
-    .streak-badge {
-        background: linear-gradient(135deg, #FF6B6B, #FF8E53);
-        color: white;
-        padding: 3px 8px;
-        border-radius: 12px;
-        font-weight: bold;
-        font-size: 0.8rem;
-    }
-    
-    /* Card-like boxes */
-    .kpi-card {
-        background-color: #1E222D;
-        border: 1px solid #2A2E39;
-        border-radius: 10px;
-        padding: 16px;
-        margin-bottom: 12px;
-    }
-    
-    /* Tabs styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 48px;
+        height: 46px;
         white-space: pre-wrap;
-        border-radius: 8px 8px 0px 0px;
+        border-radius: 6px 6px 0px 0px;
         font-weight: 600;
         font-size: 0.95rem;
         padding: 0 18px;
@@ -87,7 +56,7 @@ st.markdown("""
 # Initialize database
 database.init_db()
 
-# Ensure we have data; if completely empty, seed sample data
+# Check data; if completely empty, seed sample database
 with database.get_connection() as conn:
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM daily_breakouts")
@@ -102,14 +71,13 @@ oldest_available_date = all_dates[-1] if all_dates else date.today().isoformat()
 # ==============================================================================
 # SIDEBAR FILTERS
 # ==============================================================================
-st.sidebar.image("https://img.icons8.com/fluency/96/bullish.png", width=64)
 st.sidebar.title("HighTrack NSE")
-st.sidebar.caption("52-Week High Intelligence & Momentum Screener")
+st.sidebar.caption("52-Week High Momentum Screener")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🎯 Screening Filters")
+st.sidebar.subheader("Screening Filters")
 
-# 1. Universe Selection (EQ vs ALL)
+# 1. Universe Selection
 series_choice = st.sidebar.selectbox(
     "Equity Universe",
     options=["EQ Only (Mainboard Equity)", "EQ + BE", "All Series (EQ, BE, SM, ST)"],
@@ -119,11 +87,11 @@ series_choice = st.sidebar.selectbox(
 if "EQ Only" in series_choice:
     filter_series = "EQ"
 elif "EQ + BE" in series_choice:
-    filter_series = "EQ" # Can be extended
+    filter_series = "EQ"
 else:
     filter_series = "ALL"
 
-# 2. Time Horizon / Lookback Period
+# 2. Lookback Period
 timeframe = st.sidebar.selectbox(
     "Lookback Period",
     options=[
@@ -138,7 +106,6 @@ timeframe = st.sidebar.selectbox(
     index=0
 )
 
-# Determine start_date and end_date
 if timeframe == "Past 7 Days":
     start_date = (pd.to_datetime(latest_available_date) - timedelta(days=7)).strftime("%Y-%m-%d")
     end_date = latest_available_date
@@ -157,30 +124,30 @@ elif timeframe == "Past 90 Days":
 elif timeframe == "All History":
     start_date = oldest_available_date
     end_date = latest_available_date
-else: # Custom Date Range
+else:
     col_d1, col_d2 = st.sidebar.columns(2)
     with col_d1:
-        s_val = st.date_input("From", value=pd.to_datetime(start_date if 'start_date' in locals() else oldest_available_date))
+        s_val = st.date_input("From", value=pd.to_datetime(oldest_available_date))
     with col_d2:
         e_val = st.date_input("To", value=pd.to_datetime(latest_available_date))
     start_date = s_val.strftime("%Y-%m-%d")
     end_date = e_val.strftime("%Y-%m-%d")
 
-# 3. Market Cap Filter (INR Crore)
+# 3. Market Cap Filter
 st.sidebar.markdown("---")
 mcap_option = st.sidebar.selectbox(
     "Minimum Market Cap",
     options=list(MCAP_TIERS.keys()) + ["Custom Minimum..."],
-    index=1, # Default: > ₹500 Cr (as user requested!)
+    index=1, # Default: > 500 Cr
     help="Filter stocks having a market cap above this threshold."
 )
 
 if mcap_option == "Custom Minimum...":
-    min_mcap_val = st.sidebar.number_input("Min Market Cap (₹ Cr)", min_value=0, max_value=2000000, value=500, step=250)
+    min_mcap_val = st.sidebar.number_input("Min Market Cap (Cr)", min_value=0, max_value=2000000, value=500, step=250)
 else:
     min_mcap_val = MCAP_TIERS[mcap_option]
 
-# 4. Breakout Days / Repeated Breakout Filter
+# 4. Breakout Days Slider
 min_breakouts = st.sidebar.slider(
     "Minimum Breakout Days",
     min_value=1,
@@ -189,19 +156,15 @@ min_breakouts = st.sidebar.slider(
     help="Select 2+ to see repeated high makers only."
 )
 
-# 5. Sector Filter
-all_sectors = ["All"] + database.get_all_sectors()
-selected_sector = st.sidebar.selectbox("Sector", options=all_sectors, index=0)
-
-# 6. Streak Filter
+# 5. Streak Filter
 active_streak_only = st.sidebar.checkbox("Active Streak Only (Hit high on latest date)", value=False)
 
-# 7. Search box
-search_query = st.sidebar.text_input("🔍 Search Symbol / Company", value="").strip().upper()
+# 6. Search
+search_query = st.sidebar.text_input("Search Symbol / Company", value="").strip().upper()
 
 st.sidebar.markdown("---")
-st.sidebar.caption(f"📅 Latest Data Date: **{latest_available_date}**")
-st.sidebar.caption(f"🏛️ Universe: **{filter_series}**")
+st.sidebar.caption(f"Latest Available Date: **{latest_available_date}**")
+st.sidebar.caption(f"Universe: **{filter_series}**")
 
 # ==============================================================================
 # DATA QUERY
@@ -212,14 +175,12 @@ df_leaderboard = database.get_leaderboard_data(
     series=filter_series,
     min_days=min_breakouts,
     min_mcap=min_mcap_val,
-    sector=selected_sector if selected_sector != "All" else None
+    sector=None # Excluded sector filtering
 )
 
-# Apply active streak filter if checked
 if not df_leaderboard.empty and active_streak_only:
     df_leaderboard = df_leaderboard[df_leaderboard['current_streak'] > 0]
 
-# Apply search filter if typed
 if not df_leaderboard.empty and search_query:
     df_leaderboard = df_leaderboard[
         df_leaderboard['symbol'].str.contains(search_query, case=False, na=False) |
@@ -229,7 +190,7 @@ if not df_leaderboard.empty and search_query:
 # ==============================================================================
 # MAIN PAGE HEADER & STATS
 # ==============================================================================
-st.title("📈 HighTrack NSE: 52-Week High Intelligence")
+st.title("HighTrack NSE: 52-Week High Intelligence")
 st.markdown(
     f"Tracking **NSE Mainboard Equities** repeatedly printing fresh 52-week highs from **{start_date}** to **{end_date}**."
 )
@@ -241,30 +202,29 @@ total_unique_stocks = len(df_leaderboard) if not df_leaderboard.empty else 0
 repeated_high_stocks = len(df_leaderboard[df_leaderboard['breakout_days'] >= 2]) if not df_leaderboard.empty else 0
 active_streaks = len(df_leaderboard[df_leaderboard['current_streak'] >= 2]) if not df_leaderboard.empty else 0
 mcap_above_500 = len(df_leaderboard[df_leaderboard['market_cap_cr'] >= 500]) if not df_leaderboard.empty else 0
-total_events = df_leaderboard['breakout_days'].sum() if not df_leaderboard.empty else 0
+total_events = int(df_leaderboard['breakout_days'].sum()) if not df_leaderboard.empty else 0
 
 with kpi1:
     st.metric("Unique High Makers", f"{total_unique_stocks}")
 with kpi2:
-    st.metric("Repeated Highs (≥2D)", f"{repeated_high_stocks}", help="Stocks that appeared on 2 or more distinct trading sessions")
+    st.metric("Repeated Highs (≥ 2 Days)", f"{repeated_high_stocks}", help="Stocks that appeared on 2 or more distinct trading sessions")
 with kpi3:
-    st.metric("Active Streaks (≥2D)", f"{active_streaks}", help="Stocks hitting fresh highs on 2+ consecutive sessions ending on the latest date")
+    st.metric("Active Streaks (≥ 2 Days)", f"{active_streaks}", help="Stocks hitting fresh highs on 2+ consecutive sessions ending on the latest date")
 with kpi4:
     st.metric("Total Breakout Events", f"{total_events}")
 with kpi5:
-    st.metric("Mcap ≥ ₹500 Cr", f"{mcap_above_500}")
+    st.metric("Market Cap ≥ 500 Cr", f"{mcap_above_500}")
 
 st.markdown("---")
 
 # ==============================================================================
 # DASHBOARD TABS
 # ==============================================================================
-tab_leaderboard, tab_stock, tab_sector, tab_breadth, tab_health = st.tabs([
-    "🏆 Breakout Leaderboard",
-    "🔍 Stock Deep-Dive",
-    "🏭 Sector Analysis",
-    "📊 Market Breadth & Trends",
-    "⚙️ Data Ingestion & Health"
+tab_leaderboard, tab_stock, tab_breadth, tab_health = st.tabs([
+    "Breakout Leaderboard",
+    "Stock Deep-Dive",
+    "Market Breadth & Trends",
+    "Data Ingestion & Health"
 ])
 
 # ------------------------------------------------------------------------------
@@ -274,76 +234,90 @@ with tab_leaderboard:
     st.subheader(f"Leaderboard: Ranked by 52-Week High Breakout Frequency ({timeframe})")
     
     if df_leaderboard.empty:
-        st.warning("⚠️ No stocks match the current filter criteria. Try relaxing the market cap, minimum breakout days, or date range filters.")
+        st.warning("No stocks match the current filter criteria. Try relaxing the market cap, minimum breakout days, or date range filters.")
     else:
-        # Format columns for human display
-        display_df = df_leaderboard.copy()
+        # Keep all numeric values strictly as pure floats and integers for 100% accurate column sorting!
+        display_df = pd.DataFrame()
+        display_df['Symbol'] = df_leaderboard['symbol']
+        display_df['Company'] = df_leaderboard['company_name']
+        display_df['Market Cap (Cr)'] = df_leaderboard['market_cap_cr'].astype(float).round(2)
+        display_df['High Days'] = df_leaderboard['breakout_days'].astype(int)
+        display_df['Current Streak'] = df_leaderboard['current_streak'].astype(int)
+        display_df['Max Streak'] = df_leaderboard['max_streak'].astype(int)
+        display_df['LTP (₹)'] = df_leaderboard['latest_ltp'].astype(float).round(2)
+        display_df['52W High (₹)'] = df_leaderboard['highest_52w_high'].astype(float).round(2)
+        display_df['Drawdown %'] = df_leaderboard['drawdown_pct'].astype(float).round(2)
+        display_df['Day Change %'] = df_leaderboard['latest_pct_change'].astype(float).round(2)
+        display_df['Volume Ratio'] = df_leaderboard['volume_ratio'].astype(float).round(2)
+        display_df['Breakout Dates'] = df_leaderboard['breakout_dates_str']
         
-        # Add visual streak indicators
-        def format_streak(val):
-            if val >= 4:
-                return f"🔥 {val} Days"
-            elif val >= 2:
-                return f"⚡ {val} Days"
-            elif val == 1:
-                return "1 Day"
-            return "-"
-            
-        display_df['Streak'] = display_df['current_streak'].apply(format_streak)
-        display_df['Max Streak'] = display_df['max_streak'].apply(lambda x: f"{x} Days" if x > 0 else "-")
-        display_df['Market Cap'] = display_df['market_cap_cr'].apply(lambda x: f"₹{x:,.0f} Cr")
-        display_df['LTP (₹)'] = display_df['latest_ltp'].apply(lambda x: f"₹{x:,.2f}")
-        display_df['52W High (₹)'] = display_df['highest_52w_high'].apply(lambda x: f"₹{x:,.2f}")
-        display_df['Drawdown'] = display_df['drawdown_pct'].apply(lambda x: f"{x:+.1f}%")
-        display_df['Day Change'] = display_df['latest_pct_change'].apply(lambda x: f"{x:+.2f}%")
-        display_df['Vol Ratio'] = display_df['volume_ratio'].apply(lambda x: f"{x:.1f}x")
-        
-        columns_to_show = [
-            'symbol', 'company_name', 'sector', 'Market Cap',
-            'breakout_days', 'Streak', 'Max Streak',
-            'LTP (₹)', '52W High (₹)', 'Drawdown', 'Day Change', 'Vol Ratio',
-            'breakout_dates_str'
-        ]
-        
-        rename_map = {
-            'symbol': 'Symbol',
-            'company_name': 'Company',
-            'sector': 'Sector',
-            'breakout_days': 'High Days',
-            'breakout_dates_str': 'Breakout Dates'
-        }
-        
-        table_df = display_df[columns_to_show].rename(columns=rename_map)
-        
-        # Display Streamlit DataFrame with custom column configs
+        # Display Streamlit DataFrame with native numerical column sorting
         st.dataframe(
-            table_df,
+            display_df,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Symbol": st.column_config.TextColumn(help="NSE Symbol"),
-                "High Days": st.column_config.ProgressColumn(
-                    help="Number of days stock hit 52-week high in period",
-                    format="%d",
-                    min_value=0,
-                    max_value=int(df_leaderboard['breakout_days'].max())
+                "Symbol": st.column_config.TextColumn("Symbol", help="NSE Symbol"),
+                "Company": st.column_config.TextColumn("Company", help="Company Name"),
+                "Market Cap (Cr)": st.column_config.NumberColumn(
+                    "Market Cap (Cr)",
+                    help="Market Capitalization in Crore Rupees (numeric)",
+                    format="%.2f"
+                ),
+                "High Days": st.column_config.NumberColumn(
+                    "High Days",
+                    help="Total distinct trading days stock hit 52-week high in period",
+                    format="%d"
+                ),
+                "Current Streak": st.column_config.NumberColumn(
+                    "Current Streak",
+                    help="Consecutive trading sessions at high ending on latest date",
+                    format="%d"
+                ),
+                "Max Streak": st.column_config.NumberColumn(
+                    "Max Streak",
+                    help="Maximum consecutive breakout streak in period",
+                    format="%d"
+                ),
+                "LTP (₹)": st.column_config.NumberColumn(
+                    "LTP (₹)",
+                    help="Last Traded Price",
+                    format="%.2f"
+                ),
+                "52W High (₹)": st.column_config.NumberColumn(
+                    "52W High (₹)",
+                    help="Highest 52-week high price recorded",
+                    format="%.2f"
+                ),
+                "Drawdown %": st.column_config.NumberColumn(
+                    "Drawdown %",
+                    help="Percentage distance from highest recorded 52-week high",
+                    format="%.2f%%"
+                ),
+                "Day Change %": st.column_config.NumberColumn(
+                    "Day Change %",
+                    help="Daily percentage price change on latest breakout",
+                    format="%.2f%%"
+                ),
+                "Volume Ratio": st.column_config.NumberColumn(
+                    "Volume Ratio",
+                    help="Breakout day volume ratio vs benchmark",
+                    format="%.2fx"
                 ),
                 "Breakout Dates": st.column_config.TextColumn(
-                    help="All dates on which the company printed a new 52-week high",
+                    "Breakout Dates",
+                    help="Dates on which the company printed a new 52-week high",
                     width="large"
-                ),
-                "Drawdown": st.column_config.TextColumn(
-                    help="% change between latest price and highest 52W high recorded"
                 )
             }
         )
         
         # Export Actions
-        col_exp1, col_exp2, col_exp3 = st.columns([1, 1, 4])
+        col_exp1, col_exp2, _ = st.columns([1, 1, 4])
         with col_exp1:
-            csv_data = df_leaderboard.to_csv(index=False).encode('utf-8')
+            csv_data = display_df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="📥 Download CSV",
+                label="Download CSV",
                 data=csv_data,
                 file_name=f"hightrack_nse_{start_date}_to_{end_date}.csv",
                 mime="text/csv"
@@ -351,10 +325,10 @@ with tab_leaderboard:
         with col_exp2:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_leaderboard.to_excel(writer, index=False, sheet_name='52W_High_Leaderboard')
+                display_df.to_excel(writer, index=False, sheet_name='52W_High_Leaderboard')
             excel_data = output.getvalue()
             st.download_button(
-                label="📊 Download Excel",
+                label="Download Excel",
                 data=excel_data,
                 file_name=f"hightrack_nse_{start_date}_to_{end_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -364,9 +338,8 @@ with tab_leaderboard:
 # TAB 2: INDIVIDUAL STOCK DEEP-DIVE
 # ------------------------------------------------------------------------------
 with tab_stock:
-    st.subheader("🔍 Stock Analysis & Historical Breakout Activity")
+    st.subheader("Stock Analysis & Historical Breakout Activity")
     
-    # Stock picker
     available_symbols = df_leaderboard['symbol'].tolist() if not df_leaderboard.empty else []
     if not available_symbols:
         with database.get_connection() as conn:
@@ -387,30 +360,28 @@ with tab_stock:
         breakouts = stock_data["breakouts"]
         
         # Stock Summary Cards
-        sc1, sc2, sc3, sc4, sc5 = st.columns(5)
+        sc1, sc2, sc3, sc4 = st.columns(4)
         
         with sc1:
             st.metric("Symbol", info.get("symbol", selected_stock))
             st.caption(info.get("company_name", ""))
         with sc2:
-            st.metric("Sector", info.get("sector", "General"))
-            st.caption(f"Industry: {info.get('industry', 'N/A')}")
+            mcap_val = float(info.get("market_cap_cr") or 0.0)
+            st.metric("Market Cap (Cr)", f"{mcap_val:,.2f}")
+            st.caption("NSE Universe")
         with sc3:
-            st.metric("Market Cap", f"₹{info.get('market_cap_cr', 0):,.0f} Cr")
-            st.caption("NSE EQ Universe")
-        with sc4:
             total_b = len(breakouts)
             st.metric("Total 52W High Days", f"{total_b}")
             st.caption("In Database History")
-        with sc5:
+        with sc4:
             if not breakouts.empty:
-                max_high = breakouts['new_52w_high'].max()
-                latest_ltp = breakouts.iloc[-1]['ltp']
-                dd = ((latest_ltp - max_high) / max_high) * 100
-                st.metric("Current Drawdown", f"{dd:.1f}%")
-                st.caption(f"Peak: ₹{max_high:,.2f} | LTP: ₹{latest_ltp:,.2f}")
+                max_high = float(breakouts['new_52w_high'].max())
+                latest_ltp = float(breakouts.iloc[-1]['ltp'])
+                dd = ((latest_ltp - max_high) / max_high) * 100 if max_high > 0 else 0.0
+                st.metric("Current Drawdown", f"{dd:.2f}%")
+                st.caption(f"Peak: {max_high:,.2f} | LTP: {latest_ltp:,.2f}")
             else:
-                st.metric("Current Drawdown", "0.0%")
+                st.metric("Current Drawdown", "0.00%")
                 
         st.markdown("---")
         
@@ -418,7 +389,7 @@ with tab_stock:
             col_chart1, col_chart2 = st.columns(2)
             
             with col_chart1:
-                st.markdown("##### 📈 52-Week High Price Progression")
+                st.markdown("##### 52-Week High Price Progression")
                 fig_prog = go.Figure()
                 fig_prog.add_trace(go.Scatter(
                     x=breakouts['breakout_date'],
@@ -448,7 +419,7 @@ with tab_stock:
                 st.plotly_chart(fig_prog, use_container_width=True)
                 
             with col_chart2:
-                st.markdown("##### 🚀 Daily % Change on Breakout Sessions")
+                st.markdown("##### Daily % Change on Breakout Sessions")
                 fig_bar = px.bar(
                     breakouts,
                     x='breakout_date',
@@ -465,22 +436,29 @@ with tab_stock:
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
                 
-            st.markdown("##### 📅 Detailed Breakout History Log")
+            st.markdown("##### Detailed Breakout History Log")
+            
+            # Numeric sorting in history table
+            hist_display = pd.DataFrame()
+            hist_display['Breakout Date'] = breakouts['breakout_date']
+            hist_display['LTP (₹)'] = breakouts['ltp'].astype(float).round(2)
+            hist_display['New 52W High (₹)'] = breakouts['new_52w_high'].astype(float).round(2)
+            hist_display['Previous High (₹)'] = breakouts['prev_high'].astype(float).round(2)
+            hist_display['Daily % Change'] = breakouts['pct_change'].astype(float).round(2)
+            hist_display['Traded Volume'] = breakouts['volume'].astype(int)
+            hist_display['Source File'] = breakouts['source_file']
+            
             st.dataframe(
-                breakouts[[
-                    'breakout_date', 'ltp', 'new_52w_high', 'prev_high',
-                    'prev_high_date', 'pct_change', 'volume_ratio', 'source_file'
-                ]].sort_values('breakout_date', ascending=False),
+                hist_display.sort_values('Breakout Date', ascending=False),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "breakout_date": "Breakout Date",
-                    "ltp": st.column_config.NumberColumn("LTP (₹)", format="₹%.2f"),
-                    "new_52w_high": st.column_config.NumberColumn("New 52W High (₹)", format="₹%.2f"),
-                    "prev_high": st.column_config.NumberColumn("Previous High (₹)", format="₹%.2f"),
-                    "prev_high_date": "Previous High Date",
-                    "pct_change": st.column_config.NumberColumn("Daily % Change", format="%.2f%%"),
-                    "volume_ratio": st.column_config.NumberColumn("Volume Confirmation", format="%.1fx")
+                    "Breakout Date": st.column_config.TextColumn("Breakout Date"),
+                    "LTP (₹)": st.column_config.NumberColumn("LTP (₹)", format="%.2f"),
+                    "New 52W High (₹)": st.column_config.NumberColumn("New 52W High (₹)", format="%.2f"),
+                    "Previous High (₹)": st.column_config.NumberColumn("Previous High (₹)", format="%.2f"),
+                    "Daily % Change": st.column_config.NumberColumn("Daily % Change", format="%.2f%%"),
+                    "Traded Volume": st.column_config.NumberColumn("Traded Volume", format="%d")
                 }
             )
         else:
@@ -489,75 +467,10 @@ with tab_stock:
         st.info("No stock data available.")
 
 # ------------------------------------------------------------------------------
-# TAB 3: SECTOR ANALYSIS
-# ------------------------------------------------------------------------------
-with tab_sector:
-    st.subheader("🏭 Sector-wise Momentum & Breakout Breadth")
-    
-    if not df_leaderboard.empty:
-        # Group by sector
-        sector_summary = df_leaderboard.groupby('sector').agg(
-            total_breakout_events=('breakout_days', 'sum'),
-            unique_stocks=('symbol', 'count'),
-            avg_mcap=('market_cap_cr', 'mean'),
-            leaders=('symbol', lambda x: ", ".join(list(x)[:3]))
-        ).reset_index().sort_values(by=['total_breakout_events', 'unique_stocks'], ascending=[False, False])
-        
-        col_sec1, col_sec2 = st.columns([3, 2])
-        
-        with col_sec1:
-            st.markdown("##### 🌐 Breakout Share by Sector")
-            fig_sec = px.treemap(
-                df_leaderboard,
-                path=['sector', 'symbol'],
-                values='breakout_days',
-                color='breakout_days',
-                color_continuous_scale='Viridis',
-                title="Sector & Stock Breakdown by 52W High Frequency",
-                template="plotly_dark"
-            )
-            fig_sec.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_sec, use_container_width=True)
-            
-        with col_sec2:
-            st.markdown("##### 📊 Top Sectors by Total Breakout Events")
-            fig_bar_sec = px.bar(
-                sector_summary.head(10),
-                x='total_breakout_events',
-                y='sector',
-                orientation='h',
-                color='total_breakout_events',
-                color_continuous_scale='Teal',
-                template="plotly_dark"
-            )
-            fig_bar_sec.update_layout(
-                yaxis=dict(autorange="reversed"),
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                coloraxis_showscale=False,
-                xaxis_title="Breakout Days",
-                yaxis_title=""
-            )
-            st.plotly_chart(fig_bar_sec, use_container_width=True)
-            
-        st.markdown("##### 📋 Sector Breakdown Leaderboard")
-        sector_display = sector_summary.rename(columns={
-            'sector': 'Sector',
-            'total_breakout_events': 'Total Breakout Events',
-            'unique_stocks': 'Unique High Makers',
-            'avg_mcap': 'Average Mcap (₹ Cr)',
-            'leaders': 'Top Momentum Leaders'
-        })
-        sector_display['Average Mcap (₹ Cr)'] = sector_display['Average Mcap (₹ Cr)'].apply(lambda x: f"₹{x:,.0f} Cr")
-        st.dataframe(sector_display, use_container_width=True, hide_index=True)
-    else:
-        st.info("No data available for sector analysis.")
-
-# ------------------------------------------------------------------------------
-# TAB 4: MARKET BREADTH & DAILY TRENDS
+# TAB 3: MARKET BREADTH & DAILY TRENDS
 # ------------------------------------------------------------------------------
 with tab_breadth:
-    st.subheader("📊 Market Breadth & Daily 52-Week High Trends")
+    st.subheader("Market Breadth & Daily 52-Week High Trends")
     
     with database.get_connection() as conn:
         trend_query = """
@@ -573,7 +486,7 @@ with tab_breadth:
         col_t1, col_t2 = st.columns([3, 2])
         
         with col_t1:
-            st.markdown("##### 📈 Daily Count of Mainboard Stocks Hitting 52-Week High")
+            st.markdown("##### Daily Count of Mainboard Stocks Hitting 52-Week High")
             fig_trend = px.area(
                 trend_df,
                 x='breakout_date',
@@ -592,17 +505,17 @@ with tab_breadth:
             st.plotly_chart(fig_trend, use_container_width=True)
             
         with col_t2:
-            st.markdown("##### 🍰 Market Cap Classification of High Makers")
+            st.markdown("##### Market Cap Classification of High Makers")
             if not df_leaderboard.empty:
                 def categorize_mcap(val):
                     if val >= 20000:
-                        return "Large Cap (> ₹20k Cr)"
+                        return "Large Cap (> 20,000 Cr)"
                     elif val >= 5000:
-                        return "Mid Cap (₹5k - ₹20k Cr)"
+                        return "Mid Cap (5,000 - 20,000 Cr)"
                     elif val >= 500:
-                        return "Small Cap (₹500 - ₹5k Cr)"
+                        return "Small Cap (500 - 5,000 Cr)"
                     else:
-                        return "Micro Cap (< ₹500 Cr)"
+                        return "Micro Cap (< 500 Cr)"
                         
                 cat_counts = df_leaderboard['market_cap_cr'].apply(categorize_mcap).value_counts().reset_index()
                 cat_counts.columns = ['Category', 'Count']
@@ -618,14 +531,13 @@ with tab_breadth:
                 fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
-        # Consecutive streaks distribution
         if not df_leaderboard.empty:
-            st.markdown("##### 🔥 Streak Distribution (Consecutive Sessions at Highs)")
+            st.markdown("##### Streak Distribution (Consecutive Sessions at Highs)")
             fig_hist = px.histogram(
                 df_leaderboard,
                 x='max_streak',
                 nbins=10,
-                color_discrete_sequence=['#FF6B6B'],
+                color_discrete_sequence=['#3B82F6'],
                 labels={'max_streak': 'Max Consecutive Breakout Days'},
                 template="plotly_dark"
             )
@@ -639,44 +551,42 @@ with tab_breadth:
         st.info("No trend data available.")
 
 # ------------------------------------------------------------------------------
-# TAB 5: DATA INGESTION & SYSTEM HEALTH
+# TAB 4: DATA INGESTION & SYSTEM HEALTH
 # ------------------------------------------------------------------------------
 with tab_health:
-    st.subheader("⚙️ Data Ingestion, Collection & Health Audit")
+    st.subheader("Data Ingestion, Collection & Health Audit")
     
-    # Prominent Banner: Historical PR Archive Backfill
-    st.markdown("### 🏛️ Real Historical Data Sync (NSE PR Archive)")
-    st.info("💡 **Instant Historical Data**: NSE's daily Price/Reports archive covers every trading day from 2017 to today. You can backfill 100% verified official 52-week highs and exact market caps with 1 click!")
+    st.markdown("### Real Historical Data Sync (NSE PR Archive)")
+    st.info("NSE's daily Price/Reports archive covers every trading day from 2017 to today. You can backfill verified official 52-week highs and exact market caps with 1 click.")
     
     col_hist1, col_hist2 = st.columns([1, 1])
     with col_hist1:
         backfill_count = st.slider("Number of Past Trading Sessions to Backfill", min_value=5, max_value=60, value=30, step=5)
-        if st.button(f"⚡ Backfill Real Past {backfill_count} Trading Days", type="primary"):
-            with st.spinner(f"Connecting to PR archive and downloading real 52-week-high data for past {backfill_count} trading sessions..."):
-                res = backfill_real_history(num_days=backfill_count, end_date_str="2026-11-04")
+        if st.button(f"Backfill Past {backfill_count} Trading Days", type="primary"):
+            with st.spinner(f"Downloading real 52-week-high data for past {backfill_count} trading sessions..."):
+                res = backfill_real_history(num_days=backfill_count, end_date_str=latest_available_date)
                 if res["success"]:
-                    st.success(f"✅ Successfully backfilled {res['days_backfilled']} trading sessions! Total new breakout records inserted: {res['total_inserted']}.")
+                    st.success(f"Successfully backfilled {res['days_backfilled']} trading sessions! Total new breakout records inserted: {res['total_inserted']}.")
                     st.rerun()
                 else:
                     st.error("Failed to backfill data.")
                     
     with col_hist2:
         custom_pr_date = st.date_input("Fetch Specific Historical Date", value=pd.to_datetime("2026-11-03"))
-        if st.button("📥 Fetch Historical Date"):
+        if st.button("Fetch Historical Date"):
             with st.spinner(f"Fetching real PR records for {custom_pr_date}..."):
                 res = fetch_from_mtf_pr(custom_pr_date.strftime("%Y-%m-%d"))
                 if res["success"]:
-                    st.success(f"✅ {res['message']}")
+                    st.success(res['message'])
                     st.rerun()
                 else:
-                    st.warning(f"⚠️ {res['message']}")
+                    st.warning(res['message'])
                     
     st.markdown("---")
     col_ing1, col_ing2 = st.columns(2)
     
-    # Section A: Manual CSV Upload
     with col_ing1:
-        st.markdown("### 📤 Upload Downloaded NSE CSV")
+        st.markdown("### Upload Downloaded NSE CSV")
         st.write("Upload the `52WeekHigh.csv` directly from your downloads folder.")
         
         uploaded_file = st.file_uploader(
@@ -691,7 +601,7 @@ with tab_health:
             help="Specify the date on which this CSV was downloaded (defaults to today)."
         )
         
-        if st.button("Process & Ingest CSV", type="primary"):
+        if st.button("Process & Ingest CSV"):
             if uploaded_file is not None:
                 with st.spinner("Parsing and storing records..."):
                     res = parse_and_ingest_csv(
@@ -701,17 +611,16 @@ with tab_health:
                         filter_series_eq=False
                     )
                     if res["success"]:
-                        st.success(f"✅ {res['message']}")
+                        st.success(res['message'])
                         st.rerun()
                     else:
-                        st.error(f"❌ {res['message']}")
+                        st.error(res['message'])
             else:
                 st.warning("Please select a CSV file first.")
                 
-    # Section B: Automated Fetch from NSE
     with col_ing2:
-        st.markdown("### 🌐 Automated Fetch from NSE Live")
-        st.write("Trigger automated download directly from the official NSE India server.")
+        st.markdown("### Automated Fetch from NSE Live")
+        st.write("Trigger automated download directly from official NSE India.")
         
         fetch_date = st.date_input(
             "Fetch Snapshot Date",
@@ -719,45 +628,49 @@ with tab_health:
             key="fetch_date_input"
         )
         
-        if st.button("⚡ Fetch Today's Highs from NSE"):
-            with st.spinner("Connecting to NSE, fetching cookies, and downloading 52-week-high report..."):
+        if st.button("Fetch Today's Highs from NSE"):
+            with st.spinner("Connecting to NSE and downloading 52-week-high report..."):
                 res = fetch_live_from_nse(snapshot_date=fetch_date.strftime("%Y-%m-%d"))
                 if res["success"]:
-                    st.success(f"✅ {res['message']}")
+                    st.success(res['message'])
                     st.rerun()
                 else:
-                    st.warning(f"⚠️ {res['message']}")
-                    st.info("Tip: If NSE blocks automated cloud requests, simply download the CSV via your browser and upload it using the left panel.")
+                    st.warning(res['message'])
+                    st.info("Tip: If NSE blocks automated cloud requests, download the CSV via your browser and upload it using the left panel.")
 
     st.markdown("---")
     
     # Audit Logs
-    st.markdown("### 📋 Ingestion Logs & System Audit")
+    st.markdown("### Ingestion Logs & System Audit")
     logs_df = database.get_ingestion_logs(limit=25)
     if not logs_df.empty:
+        log_display = pd.DataFrame()
+        log_display['Timestamp'] = logs_df['timestamp']
+        log_display['Trading Date'] = logs_df['trading_date']
+        log_display['Source'] = logs_df['source']
+        log_display['Status'] = logs_df['status']
+        log_display['Total Rows'] = logs_df['total_records'].astype(int)
+        log_display['EQ Rows'] = logs_df['eq_records'].astype(int)
+        log_display['Inserted'] = logs_df['inserted_records'].astype(int)
+        log_display['Duplicates'] = logs_df['duplicate_records'].astype(int)
+        log_display['Audit Log Message'] = logs_df['message']
+        
         st.dataframe(
-            logs_df,
+            log_display,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "timestamp": "Timestamp",
-                "trading_date": "Trading Date",
-                "source": "Source",
-                "status": "Status",
-                "total_records": "Total Rows",
-                "eq_records": "EQ Rows",
-                "inserted_records": "Inserted",
-                "duplicate_records": "Duplicates",
-                "message": "Audit Log Message"
+                "Total Rows": st.column_config.NumberColumn("Total Rows", format="%d"),
+                "EQ Rows": st.column_config.NumberColumn("EQ Rows", format="%d"),
+                "Inserted": st.column_config.NumberColumn("Inserted", format="%d"),
+                "Duplicates": st.column_config.NumberColumn("Duplicates", format="%d"),
             }
         )
     else:
         st.info("No ingestion logs available.")
         
     st.markdown("---")
-    col_reset1, col_reset2 = st.columns([1, 3])
-    with col_reset1:
-        if st.button("🔄 Reset / Re-seed Sample Data"):
-            seed_sample_database(force=True)
-            st.success("Sample database reset successfully!")
-            st.rerun()
+    if st.button("Reset / Re-seed Sample Data"):
+        seed_sample_database(force=True)
+        st.success("Sample database reset successfully!")
+        st.rerun()
