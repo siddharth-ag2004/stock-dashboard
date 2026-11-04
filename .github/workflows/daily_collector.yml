@@ -9,6 +9,8 @@ on:
 jobs:
   collect:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -25,7 +27,7 @@ jobs:
 
       - name: Fetch and Store Today's 52-Week Highs
         run: |
-          python collector.py --fetch
+          python collector.py --pr $(date +'%Y-%m-%d')
 
       - name: Commit and Push Updated Data
         run: |
