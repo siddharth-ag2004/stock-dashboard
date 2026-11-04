@@ -227,6 +227,10 @@ nav_options = [
     "Data Ingestion & Health"
 ]
 
+# Apply any pending tab switch BEFORE widget instantiation to prevent StreamlitWidgetAlreadyInstantiatedError
+if "pending_tab" in st.session_state and st.session_state["pending_tab"] in nav_options:
+    st.session_state["nav_tab"] = st.session_state.pop("pending_tab")
+
 if "nav_tab" not in st.session_state or st.session_state["nav_tab"] not in nav_options:
     st.session_state["nav_tab"] = "Breakout Leaderboard"
 
@@ -333,7 +337,7 @@ if selected_tab == "Breakout Leaderboard":
             clicked_idx = event.selection.rows[0]
             clicked_symbol = display_df.iloc[clicked_idx]["Symbol"]
             st.session_state["selected_stock"] = clicked_symbol
-            st.session_state["nav_tab"] = "Stock Deep-Dive"
+            st.session_state["pending_tab"] = "Stock Deep-Dive"
             st.rerun()
         
         # Export Actions
@@ -395,7 +399,7 @@ elif selected_tab == "Stock Deep-Dive":
                 st.link_button("View on NSE India ↗", nse_url)
             with col_l2:
                 if st.button("← Back to Leaderboard"):
-                    st.session_state["nav_tab"] = "Breakout Leaderboard"
+                    st.session_state["pending_tab"] = "Breakout Leaderboard"
                     st.rerun()
         
         stock_data = database.get_stock_details(selected_stock)
