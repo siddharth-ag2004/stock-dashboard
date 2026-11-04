@@ -258,9 +258,9 @@ if selected_tab == "Breakout Leaderboard":
         display_df = pd.DataFrame()
         display_df['Symbol'] = df_leaderboard['symbol']
         display_df['Company'] = df_leaderboard['company_name']
-        display_df['Market Cap (Cr)'] = df_leaderboard['market_cap_cr'].astype(float).round(2)
-        display_df['High Days'] = df_leaderboard['breakout_days'].astype(int)
-        display_df['Current Streak'] = df_leaderboard['current_streak'].astype(int)
+        display_df['Market Cap (Cr) ↓'] = df_leaderboard['market_cap_cr'].astype(float).round(2)
+        display_df['High Days ↓'] = df_leaderboard['breakout_days'].astype(int)
+        display_df['Current Streak ↓'] = df_leaderboard['current_streak'].astype(int)
         display_df['Max Streak'] = df_leaderboard['max_streak'].astype(int)
         display_df['LTP (₹)'] = df_leaderboard['latest_ltp'].astype(float).round(2)
         display_df['52W High (₹)'] = df_leaderboard['highest_52w_high'].astype(float).round(2)
@@ -279,19 +279,19 @@ if selected_tab == "Breakout Leaderboard":
             column_config={
                 "Symbol": st.column_config.TextColumn("Symbol", help="NSE Symbol"),
                 "Company": st.column_config.TextColumn("Company", help="Company Name"),
-                "Market Cap (Cr)": st.column_config.NumberColumn(
-                    "Market Cap (Cr)",
-                    help="Market Capitalization in Crore Rupees (numeric)",
+                "Market Cap (Cr) ↓": st.column_config.NumberColumn(
+                    "Market Cap (Cr) ↓",
+                    help="Market Capitalization in Crore Rupees — sorted descending by default",
                     format="%.2f"
                 ),
-                "High Days": st.column_config.NumberColumn(
-                    "High Days",
-                    help="Total distinct trading days stock hit 52-week high in period",
+                "High Days ↓": st.column_config.NumberColumn(
+                    "High Days ↓",
+                    help="Total distinct trading days stock hit 52-week high — sorted descending by default",
                     format="%d"
                 ),
-                "Current Streak": st.column_config.NumberColumn(
-                    "Current Streak",
-                    help="Consecutive trading sessions at high ending on latest date",
+                "Current Streak ↓": st.column_config.NumberColumn(
+                    "Current Streak ↓",
+                    help="Consecutive trading sessions at high ending on latest date — sorted descending by default",
                     format="%d"
                 ),
                 "Max Streak": st.column_config.NumberColumn(
