@@ -45,4 +45,6 @@ jobs:
             exit 0
           fi
           git commit -m "Auto-update: Daily NSE 52-week high data"
-          git push
+          # Streamlit Cloud deploys from master; keep it synchronized with main.
+          git push origin HEAD:main
+          git push origin HEAD:master
