@@ -172,6 +172,17 @@ def insert_breakout(record: Dict[str, Any]) -> bool:
             # Duplicate (symbol + breakout_date)
             return False
 
+def delete_breakouts_for_date(breakout_date: str) -> int:
+    """Remove all breakout rows for a session before an authoritative rebuild."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM daily_breakouts WHERE breakout_date = ?",
+            (breakout_date,),
+        )
+        return cursor.rowcount
+
+
 def record_market_cap_snapshot(symbol: str, snapshot_date: str, market_cap_cr: float):
     """Store historical market cap snapshot."""
     with get_connection() as conn:

@@ -96,9 +96,15 @@ Open your browser at: **`http://localhost:8501`**
 
 A GitHub Actions workflow is included at `.github/workflows/daily_collector.yml`.
 - First run is **Monday through Friday at 4:15 PM IST**. Three later runs the same evening retry the same session, because GitHub sometimes drops a single scheduled run.
-- The job asks for the latest **closed** NSE session in IST (not the UTC date), writes it into `hightrack.db`, and commits that database.
+- The job asks for the latest **closed** NSE session in IST (not the UTC date), fetches it from the MTF/NSE PR archive API, writes it into `hightrack.db`, and commits that database.
 - Opening the dashboard also downloads a closed session if it is missing from the database.
 - You can also manually trigger it anytime from the GitHub Actions tab.
+
+Historical sessions in `hightrack.db` are API-sourced `PR_YYYY-MM-DD.json` records. To replace an older mixed-source range with the authoritative archive data, run:
+
+```bash
+python collector.py --rebuild-api-start YYYY-MM-DD --rebuild-api-end YYYY-MM-DD
+```
 
 ---
 

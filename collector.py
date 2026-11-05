@@ -25,6 +25,7 @@ from database import (
     record_market_cap_snapshot,
     log_ingestion,
     get_distinct_trading_dates,
+    delete_breakouts_for_date,
 )
 from stock_universe import get_stock_metadata
 
@@ -252,7 +253,7 @@ def parse_and_ingest_csv(
         log_ingestion(snapshot_date, source_label, "FAILED", 0, 0, 0, 0, err_msg)
         return {"success": False, "message": err_msg, "inserted": 0, "duplicates": 0}
 
-def fetch_from_mtf_pr(date_str: str) -> Dict[str, Any]:
+def fetch_from_mtf_pr(date_str: str, replace_existing: bool = False) -> Dict[str, Any]:
     """
     Fetches real 52-week-high data and market caps from MTF/NSE PR archive
     using the 'pd' (Price Data) and 'mcap' (Market Cap) member files.
@@ -295,7 +296,14 @@ def fetch_from_mtf_pr(date_str: str) -> Dict[str, Any]:
         
     if not pd_rows:
         msg = f"No trading data available for {date_norm} (likely weekend or exchange holiday)."
+        if replace_existing:
+            deleted_count = delete_breakouts_for_date(date_norm)
+            logger.info(f"Removed {deleted_count} stale rows for unavailable session {date_norm}.")
         return {"success": False, "message": msg, "inserted": 0, "duplicates": 0}
+
+    if replace_existing:
+        deleted_count = delete_breakouts_for_date(date_norm)
+        logger.info(f"Removed {deleted_count} existing rows for {date_norm} before API rebuild.")
         
     total_breakouts = 0
     eq_breakouts = 0
@@ -409,6 +417,29 @@ def backfill_real_history(num_days: int = 30, end_date_str: Optional[str] = None
         "dates": success_days
     }
 
+
+def rebuild_api_history(start_date: str, end_date: str) -> Dict[str, Any]:
+    """Rebuild stored sessions from the MTF archive, replacing non-API rows."""
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    if start > end:
+        raise ValueError("start_date must be on or before end_date")
+
+    results = []
+    current = start
+    while current <= end:
+        if current.weekday() < 5:
+            results.append(fetch_from_mtf_pr(current.isoformat(), replace_existing=True))
+        current += timedelta(days=1)
+
+    successful = [result for result in results if result.get("success")]
+    return {
+        "success": len(successful) == len(results),
+        "sessions_requested": len(results),
+        "sessions_succeeded": len(successful),
+        "results": results,
+    }
+
 def fetch_live_from_nse(snapshot_date: Optional[str] = None) -> Dict[str, Any]:
     """Automated fetch of the 52-week-high data directly from NSE India."""
     if not snapshot_date:
@@ -463,11 +494,17 @@ if __name__ == "__main__":
     parser.add_argument("--fetch", action="store_true", help="Fetch directly from NSE live")
     parser.add_argument("--pr", type=str, help="Fetch real PR data for date (YYYY-MM-DD)")
     parser.add_argument("--backfill", type=int, help="Backfill N trading days of real PR data")
+    parser.add_argument("--rebuild-api-start", type=str, help="Rebuild stored sessions from the MTF API starting on this date")
+    parser.add_argument("--rebuild-api-end", type=str, help="End date for --rebuild-api-start (inclusive)")
     parser.add_argument("--file", type=str, help="Path to downloaded 52WeekHigh.csv")
     parser.add_argument("--date", type=str, help="Snapshot date (YYYY-MM-DD)")
     args = parser.parse_args()
     
-    if args.pr:
+    if args.rebuild_api_start or args.rebuild_api_end:
+        if not args.rebuild_api_start or not args.rebuild_api_end:
+            parser.error("--rebuild-api-start and --rebuild-api-end must be provided together")
+        print(rebuild_api_history(args.rebuild_api_start, args.rebuild_api_end))
+    elif args.pr:
         pr_date = session_date_to_fetch() if args.pr.strip().lower() == "auto" else args.pr
         res = fetch_from_mtf_pr(pr_date)
         print(res)
