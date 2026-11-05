@@ -95,8 +95,9 @@ Open your browser at: **`http://localhost:8501`**
 ## ⏰ Automated Daily Data Collection
 
 A GitHub Actions workflow is included at `.github/workflows/daily_collector.yml`.
-- Runs automatically **Monday through Friday at 4:15 PM IST** (after NSE market close).
-- Fetches the daily 52-week-high CSV, enriches metadata, updates `hightrack.db`, and commits the changes back to your repository.
+- First run is **Monday through Friday at 4:15 PM IST**. Three later runs the same evening retry the same session, because GitHub sometimes drops a single scheduled run.
+- The job asks for the latest **closed** NSE session in IST (not the UTC date), writes it into `hightrack.db`, and commits that database.
+- Opening the dashboard also downloads a closed session if it is missing from the database.
 - You can also manually trigger it anytime from the GitHub Actions tab.
 
 ---

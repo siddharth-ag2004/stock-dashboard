@@ -13,15 +13,67 @@ import shutil
 import logging
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, Optional, Tuple, Union, List
+from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 
 from config import RAW_CSV_DIR, DEFAULT_HEADERS, NSE_BASE_URL, NSE_52W_HIGH_CSV_URL, NSE_52W_HIGH_URL
-from database import init_db, insert_breakout, upsert_stock, record_market_cap_snapshot, log_ingestion
+from database import (
+    init_db,
+    insert_breakout,
+    upsert_stock,
+    record_market_cap_snapshot,
+    log_ingestion,
+    get_distinct_trading_dates,
+)
 from stock_universe import get_stock_metadata
+
+IST = ZoneInfo("Asia/Kolkata")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("NSECollector")
+
+def session_date_to_fetch(now: Optional[datetime] = None) -> str:
+    """Return the latest NSE cash session whose price report should exist.
+
+    The cash market closes at 15:30 IST. Before 16:00 IST, today's file is
+    not the closed session yet, so the previous weekday is used. Saturday
+    and Sunday roll back to Friday.
+    """
+    if now is None:
+        now = datetime.now(IST)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=IST)
+    else:
+        now = now.astimezone(IST)
+
+    session = now.date()
+    if now.hour < 16:
+        session -= timedelta(days=1)
+    while session.weekday() >= 5:
+        session -= timedelta(days=1)
+    return session.isoformat()
+
+def pending_session_dates(max_sessions: int = 4) -> List[str]:
+    """Weekdays up to the latest closed session that are missing from the DB."""
+    target = datetime.strptime(session_date_to_fetch(), "%Y-%m-%d").date()
+    have = set(get_distinct_trading_dates("ALL"))
+    pending: List[str] = []
+    cursor = target
+    scanned = 0
+    while len(pending) < max_sessions and scanned < max_sessions * 3:
+        scanned += 1
+        if cursor.weekday() < 5 and cursor.isoformat() not in have:
+            pending.append(cursor.isoformat())
+        cursor -= timedelta(days=1)
+    pending.reverse()
+    return pending
+
+def sync_recent_sessions(max_sessions: int = 4) -> Dict[str, Any]:
+    """Download recent closed sessions that the database does not have yet."""
+    pending = pending_session_dates(max_sessions)
+    results = [fetch_from_mtf_pr(d) for d in pending]
+    return {"pending": pending, "results": results}
 
 def clean_float(val: Any) -> float:
     """Sanitize and parse float values safely."""
@@ -320,21 +372,27 @@ def fetch_from_mtf_pr(date_str: str) -> Dict[str, Any]:
         "duplicates": duplicate_count
     }
 
-def backfill_real_history(num_days: int = 30, end_date_str: Optional[str] = "2026-11-04") -> Dict[str, Any]:
+def backfill_real_history(num_days: int = 30, end_date_str: Optional[str] = None) -> Dict[str, Any]:
     """
-    Backfill N trading days of 100% REAL historical 52-week-high data
-    from the MTF/NSE PR archive.
+    Backfill N trading days of historical 52-week-high data
+    from the MTF/NSE PR archive, ending at the latest closed session.
     """
     if not end_date_str:
-        end_date_str = date.today().isoformat()
+        end_date_str = session_date_to_fetch()
+    else:
+        end_date_str = pd.to_datetime(end_date_str).strftime("%Y-%m-%d")
         
     curr = datetime.strptime(end_date_str, "%Y-%m-%d").date()
     days_processed = 0
     total_inserted = 0
     success_days = []
+    steps = 0
+    max_steps = max(num_days * 3, num_days + 14)
     
-    # Iterate backwards through calendar days, skipping weekends
-    while days_processed < num_days:
+    # Iterate backwards through calendar days, skipping weekends.
+    # Stop if the archive is unreachable so a dead API cannot loop forever.
+    while days_processed < num_days and steps < max_steps:
+        steps += 1
         if curr.weekday() < 5: # Monday to Friday
             d_str = curr.strftime("%Y-%m-%d")
             res = fetch_from_mtf_pr(d_str)
@@ -410,7 +468,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.pr:
-        print(fetch_from_mtf_pr(args.pr))
+        pr_date = session_date_to_fetch() if args.pr.strip().lower() == "auto" else args.pr
+        res = fetch_from_mtf_pr(pr_date)
+        print(res)
+        raise SystemExit(0 if res.get("success") else 1)
     elif args.backfill:
         print(backfill_real_history(args.backfill, end_date_str=args.date))
     elif args.file:

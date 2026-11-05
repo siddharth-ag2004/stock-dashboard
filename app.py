@@ -10,7 +10,15 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta, date
 
 import database
-from collector import parse_and_ingest_csv, fetch_live_from_nse, fetch_from_mtf_pr, backfill_real_history
+from collector import (
+    parse_and_ingest_csv,
+    fetch_live_from_nse,
+    fetch_from_mtf_pr,
+    backfill_real_history,
+    pending_session_dates,
+    sync_recent_sessions,
+    session_date_to_fetch,
+)
 from config import MCAP_TIERS
 from sample_data import seed_sample_database
 
@@ -55,6 +63,15 @@ st.markdown("""
 
 # Initialize database
 database.init_db()
+
+# Pull any closed session the shipped database does not have yet.
+# One attempt per browser session, so a down archive is not retried on every click.
+if "nse_sync_attempted" not in st.session_state:
+    st.session_state["nse_sync_attempted"] = True
+    missing_sessions = pending_session_dates()
+    if missing_sessions:
+        with st.spinner(f"Downloading NSE session {missing_sessions[-1]}..."):
+            sync_recent_sessions()
 
 # Check data; if completely empty, seed sample database
 with database.get_connection() as conn:
@@ -612,7 +629,7 @@ elif selected_tab == "Data Ingestion & Health":
         backfill_count = st.slider("Number of Past Trading Sessions to Backfill", min_value=5, max_value=60, value=30, step=5)
         if st.button(f"Backfill Past {backfill_count} Trading Days", type="primary"):
             with st.spinner(f"Downloading real 52-week-high data for past {backfill_count} trading sessions..."):
-                res = backfill_real_history(num_days=backfill_count, end_date_str=latest_available_date)
+                res = backfill_real_history(num_days=backfill_count, end_date_str=session_date_to_fetch())
                 if res["success"]:
                     st.success(f"Successfully backfilled {res['days_backfilled']} trading sessions! Total new breakout records inserted: {res['total_inserted']}.")
                     st.rerun()
