@@ -456,3 +456,20 @@ def get_ingestion_logs(limit: int = 50) -> pd.DataFrame:
             ORDER BY id DESC
             LIMIT ?
         """, conn, params=(limit,))
+
+
+def get_confirmed_no_session_dates(min_age_days: int = 2) -> set:
+    """Dates the archive reported as having no session (holiday/weekend).
+
+    Only dates at least `min_age_days` old are returned, so a session the
+    archive is merely late publishing keeps being retried.
+    """
+    from datetime import date, timedelta
+    cutoff = (date.today() - timedelta(days=min_age_days)).isoformat()
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT trading_date FROM ingestion_log "
+            "WHERE status = 'NO_SESSION' AND trading_date <= ?",
+            (cutoff,),
+        ).fetchall()
+    return {r[0] for r in rows}

@@ -26,6 +26,7 @@ from database import (
     log_ingestion,
     get_distinct_trading_dates,
     delete_breakouts_for_date,
+    get_confirmed_no_session_dates,
 )
 from stock_universe import get_stock_metadata
 
@@ -58,7 +59,7 @@ def session_date_to_fetch(now: Optional[datetime] = None) -> str:
 def pending_session_dates(max_sessions: int = 4) -> List[str]:
     """Weekdays up to the latest closed session that are missing from the DB."""
     target = datetime.strptime(session_date_to_fetch(), "%Y-%m-%d").date()
-    have = set(get_distinct_trading_dates("ALL"))
+    have = set(get_distinct_trading_dates("ALL")) | get_confirmed_no_session_dates()
     pending: List[str] = []
     cursor = target
     scanned = 0
@@ -299,7 +300,8 @@ def fetch_from_mtf_pr(date_str: str, replace_existing: bool = False) -> Dict[str
         if replace_existing:
             deleted_count = delete_breakouts_for_date(date_norm)
             logger.info(f"Removed {deleted_count} stale rows for unavailable session {date_norm}.")
-        return {"success": False, "message": msg, "inserted": 0, "duplicates": 0}
+        log_ingestion(date_norm, "MTF PR Archive", "NO_SESSION", 0, 0, 0, 0, msg)
+        return {"success": False, "no_session": True, "message": msg, "inserted": 0, "duplicates": 0}
 
     if replace_existing:
         deleted_count = delete_breakouts_for_date(date_norm)
@@ -508,6 +510,9 @@ if __name__ == "__main__":
         pr_date = session_date_to_fetch() if args.pr.strip().lower() == "auto" else args.pr
         res = fetch_from_mtf_pr(pr_date)
         print(res)
+        if res.get("no_session"):
+            print(f"No NSE session for {pr_date} (holiday/weekend); nothing to do.")
+            raise SystemExit(0)
         raise SystemExit(0 if res.get("success") else 1)
     elif args.backfill:
         print(backfill_real_history(args.backfill, end_date_str=args.date))
